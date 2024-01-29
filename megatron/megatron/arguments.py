@@ -1389,6 +1389,7 @@ def _add_data_args(parser):
                                 'SentencePieceTokenizer',
                                 'GPTSentencePieceTokenizer',
                                 'NullTokenizer',
+                                'Llama2Tokenizer',
                                 'AquilaTokenizer'],
                        help='What type of tokenizer to use.')
     group.add_argument('--tokenizer-model', type=str, default=None,
