@@ -21,7 +21,7 @@ NODE_RANK=0
 WORLD_SIZE=$(($GPUS_PER_NODE*$NNODES))
 
 # Parallel config
-TP=1
+TP=2
 PP=4
 
 # Data config
@@ -112,7 +112,8 @@ GPT_ARGS="
     --bf16 \
     --recompute-granularity full \
     --recompute-method uniform \
-    # --recompute-num-layers 2" 
+    --recompute-num-layers 1" 
+
     # --no-check-for-nan-in-loss-and-grad
 
 DATA_ARGS="
@@ -132,7 +133,13 @@ OUTPUT_ARGS="
 
 HETERO_ARGS="
     --hetero-mode pp \
-    --num_layers_per_pp_stage 1 2 3 2"
+    --hetero-current-device-type A100 \
+    --hetero-device-types A100 A800 \
+    --hetero-pipeline-stages 2 1 1 2 3 3"
+
+    # --overlap-param-gather \
+    # --overlap-grad-reduce \
+
 
 torchrun $DISTRIBUTED_ARGS pretrain_llama.py \
     $GPT_ARGS \
@@ -144,8 +151,6 @@ torchrun $DISTRIBUTED_ARGS pretrain_llama.py \
     --use-flash-attn \
     --save $CHECKPOINT_PATH \
     --use-distributed-optimizer \
-    --overlap-param-gather \
-    --overlap-grad-reduce \
     --empty-unused-memory-level 2 \
     --tensorboard-dir $TENSORBOARD_PATH \
     --tensorboard-log-interval 1 \
