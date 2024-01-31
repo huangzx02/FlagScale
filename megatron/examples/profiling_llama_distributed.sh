@@ -16,17 +16,17 @@ GPUS_PER_NODE=8
 # Change for multinode config
 MASTER_ADDR=localhost
 MASTER_PORT=9302
-NNODES=1
+NNODES=2
 NODE_RANK=0
 WORLD_SIZE=$(($GPUS_PER_NODE*$NNODES))
 
 # Parallel config
-TP=2
-PP=4
+TP=1
+PP=2
 
 # Data config
 DP_SIZE=$((WORLD_SIZE/TP/PP))
-BATCH_SIZE=2
+BATCH_SIZE=1
 ACCUMULATION_STEPS=8
 GLOBAL_BATCH_SIZE=$(($BATCH_SIZE*$DP_SIZE*$ACCUMULATION_STEPS))
 
@@ -91,7 +91,6 @@ GPT_ARGS="
     --seq-length $SEQ_LENGTH \
     --max-position-embeddings $SEQ_LENGTH \
     --position-embedding-type rope \
-    --micro-batch-size $BATCH_SIZE \
     --global-batch-size $GLOBAL_BATCH_SIZE \
     --make-vocab-size-divisible-by $TP \
     --lr 2e-4 \
@@ -131,11 +130,20 @@ OUTPUT_ARGS="
     --eval-interval 1000 \
     --eval-iters 0"
 
-HETERO_ARGS="
+HETERO_PP_ARGS="
     --hetero-mode pp \
     --hetero-current-device-type A100 \
     --hetero-device-types A100 A800 \
-    --hetero-pipeline-stages 2 1 1 2 3 3"
+    --hetero-pipeline-stages 1 5 3 1 1 1 \
+    --micro-batch-size $BATCH_SIZE \
+"
+
+HETERO_DP_ARGS="
+    --hetero-mode dp \
+    --hetero-current-device-type A100 \
+    --hetero-device-types A100 A800 \
+    --hetero-micro-batch-sizes 2 1 2 3"
+
 
     # --overlap-param-gather \
     # --overlap-grad-reduce \
@@ -145,7 +153,7 @@ torchrun $DISTRIBUTED_ARGS pretrain_llama.py \
     $GPT_ARGS \
     $DATA_ARGS \
     $OUTPUT_ARGS \
-    $HETERO_ARGS \
+    $HETERO_DP_ARGS \
     --seed $SEED \
     --distributed-backend nccl \
     --use-flash-attn \
