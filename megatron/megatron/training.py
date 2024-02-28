@@ -665,9 +665,14 @@ def train_step(forward_step_func, data_iterator,
                         args.micro_batch_size * \
                         args.data_parallel_size
         else:
-            micro_batch_for_all_data_parallel = sum(map(lambda x, y: x * y, 
+            if args.hetero_dp_mode == 'mbs':
+                micro_batch_for_all_data_parallel = sum(map(lambda x, y: x * y, 
                                                         args.hetero_micro_batch_sizes,
                                                         args.hetero_data_parallel_splits))
+            elif args.hetero_dp_mode == 'bs':
+                micro_batch_for_all_data_parallel = sum(map(lambda x, y: x * y, 
+                                                        args.hetero_batch_sizes,
+                                                        args.hetero_data_parallel_splits)) // args.micro_batch_size
             increment = get_num_microbatches() * \
                         micro_batch_for_all_data_parallel
         # TODO: For now, we only support constant LR scheduler.
@@ -762,10 +767,16 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
         batch_size = args.micro_batch_size * args.data_parallel_size * \
             get_num_microbatches()
     else:
-        micro_batch_for_all_data_parallel = sum(map(lambda x, y: x * y, 
-                                                    args.hetero_micro_batch_sizes,
-                                                    args.hetero_data_parallel_splits))
-        batch_size = micro_batch_for_all_data_parallel * get_num_microbatches()
+        if args.hetero_dp_mode == 'mbs':
+            micro_batch_for_all_data_parallel = sum(map(lambda x, y: x * y, 
+                                                        args.hetero_micro_batch_sizes,
+                                                        args.hetero_data_parallel_splits))
+            batch_size = micro_batch_for_all_data_parallel * get_num_microbatches()
+        elif args.hetero_dp_mode == 'bs':
+            micro_batch_for_all_data_parallel = sum(map(lambda x, y: x * y, 
+                                                        args.hetero_batch_sizes,
+                                                        args.hetero_data_parallel_splits)) // args.micro_batch_size
+            batch_size = micro_batch_for_all_data_parallel * get_num_microbatches()
 
     total_iterations = total_loss_dict[advanced_iters_key] + \
                        total_loss_dict[skipped_iters_key]
@@ -992,10 +1003,16 @@ def train(forward_step_func, model, optimizer, opt_param_scheduler,
                                            args.micro_batch_size * \
                                            get_num_microbatches()
         else:
-            micro_batch_for_all_data_parallel = sum(map(lambda x, y: x * y, 
-                                                        args.hetero_micro_batch_sizes,
-                                                        args.hetero_data_parallel_splits))
-            args.consumed_train_samples += get_num_microbatches() * micro_batch_for_all_data_parallel
+            if args.hetero_dp_mode == 'mbs':
+                micro_batch_for_all_data_parallel = sum(map(lambda x, y: x * y, 
+                                                            args.hetero_micro_batch_sizes,
+                                                            args.hetero_data_parallel_splits))
+                args.consumed_train_samples += get_num_microbatches() * micro_batch_for_all_data_parallel
+            elif args.hetero_dp_mode == 'bs':
+                micro_batch_for_all_data_parallel = sum(map(lambda x, y: x * y, 
+                                                            args.hetero_batch_sizes,
+                                                            args.hetero_data_parallel_splits)) // args.micro_batch_size
+                args.consumed_train_samples += get_num_microbatches() * micro_batch_for_all_data_parallel
 
         # remove hooks of coordination check
         if args.mup_coord_check:
@@ -1124,11 +1141,16 @@ def search_data(train_valid_test_dataset_provider, get_batch):
                                            args.micro_batch_size * \
                                            get_num_microbatches()
         else:
-            micro_batch_for_all_data_parallel = sum(map(lambda x, y: x * y, 
-                                                        args.hetero_micro_batch_sizes,
-                                                        args.hetero_data_parallel_splits))
-            args.consumed_train_samples += get_num_microbatches() * micro_batch_for_all_data_parallel
-    
+            if args.hetero_dp_mode == 'mbs':
+                micro_batch_for_all_data_parallel = sum(map(lambda x, y: x * y, 
+                                                            args.hetero_micro_batch_sizes,
+                                                            args.hetero_data_parallel_splits))
+                args.consumed_train_samples += get_num_microbatches() * micro_batch_for_all_data_parallel
+            elif args.hetero_dp_mode == 'bs':
+                micro_batch_for_all_data_parallel = sum(map(lambda x, y: x * y, 
+                                                            args.hetero_batch_sizes,
+                                                            args.hetero_data_parallel_splits)) // args.micro_batch_size
+                args.consumed_train_samples += get_num_microbatches() * micro_batch_for_all_data_parallel
     # Build the dataloader
     args.iteration = iteration 
     update_train_iters(args)
@@ -1166,10 +1188,16 @@ def search_data(train_valid_test_dataset_provider, get_batch):
                                            args.micro_batch_size * \
                                            get_num_microbatches()
         else:
-            micro_batch_for_all_data_parallel = sum(map(lambda x, y: x * y, 
-                                                        args.hetero_micro_batch_sizes,
-                                                        args.hetero_data_parallel_splits))
-            args.consumed_train_samples += get_num_microbatches() * micro_batch_for_all_data_parallel
+            if args.hetero_dp_mode == 'mbs':
+                micro_batch_for_all_data_parallel = sum(map(lambda x, y: x * y, 
+                                                            args.hetero_micro_batch_sizes,
+                                                            args.hetero_data_parallel_splits))
+                args.consumed_train_samples += get_num_microbatches() * micro_batch_for_all_data_parallel
+            elif args.hetero_dp_mode == 'bs':
+                micro_batch_for_all_data_parallel = sum(map(lambda x, y: x * y, 
+                                                            args.hetero_batch_sizes,
+                                                            args.hetero_data_parallel_splits)) // args.micro_batch_size
+                args.consumed_train_samples += get_num_microbatches() * micro_batch_for_all_data_parallel
     if not os.path.exists(args.data_searching_save):
         raise ValueError("searched data save path does not exist")
     searched_data_file = os.path.join(args.data_searching_save, "searched_data_{}_to_{}".format(search_start, search_end))
@@ -1199,10 +1227,16 @@ def evaluate(forward_step_func,
         eval_num_microbatches = eval_batch_size // \
             (args.micro_batch_size * args.data_parallel_size)
     else:
-        micro_batch_for_all_data_parallel = sum(map(lambda x, y: x * y, 
-                                                    args.hetero_micro_batch_sizes,
-                                                    args.hetero_data_parallel_splits))
-        eval_num_microbatches = eval_batch_size // micro_batch_for_all_data_parallel 
+        if args.hetero_dp_mode == 'mbs':
+            micro_batch_for_all_data_parallel = sum(map(lambda x, y: x * y, 
+                                                        args.hetero_micro_batch_sizes,
+                                                        args.hetero_data_parallel_splits))
+            eval_num_microbatches = eval_batch_size // micro_batch_for_all_data_parallel 
+        elif args.hetero_dp_mode == 'bs':
+            micro_batch_for_all_data_parallel = sum(map(lambda x, y: x * y, 
+                                                        args.hetero_batch_sizes,
+                                                        args.hetero_data_parallel_splits)) // args.micro_batch_size
+            eval_num_microbatches = eval_batch_size // micro_batch_for_all_data_parallel
 
     with torch.no_grad():
         iteration = 0
@@ -1385,6 +1419,7 @@ def build_train_valid_test_data_loaders(
                     valid_ds, args.consumed_valid_samples)
             test_dataloader = build_pretraining_data_loader(test_ds, 0)
         else:
+            # TODO: check dataloader
             train_dataloader = build_pretraining_data_loader_hetero(
                 train_ds, args.consumed_train_samples)
             if args.skip_train:

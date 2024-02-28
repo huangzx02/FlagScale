@@ -105,9 +105,9 @@ def validate_args(args, defaults={}):
                             args.pipeline_model_parallel_size)
 
     # Deprecated arguments
-    assert args.batch_size is None, '--batch-size argument is no longer ' \
-        'valid, use --micro-batch-size instead'
-    del args.batch_size
+    # assert args.batch_size is None, '--batch-size argument is no longer ' \
+    #     'valid, use --micro-batch-size instead'
+    # del args.batch_size
     assert args.warmup is None, '--warmup argument is no longer valid, use ' \
         '--lr-warmup-fraction instead'
     del args.warmup
@@ -156,39 +156,71 @@ def validate_args(args, defaults={}):
         args.hetero_pipeline_stage_splits = None 
 
     if args.hetero_mode == "dp":
-        assert args.hetero_micro_batch_sizes, \
-            "hetero_micro_batch_sizes should be specified when hetero_mode is dp"
+        assert args.hetero_dp_mode, "hetero_dp_mode should be specified when hetero_mode is dp"
         assert args.hetero_pipeline_stages is None, \
             "hetero_pipeline_stages should be None when hetero_mode is dp"
-        assert args.micro_batch_size is None, \
-            "micro_batch_size should be None when hetero_mode is dp"
         args.hetero_pipeline_stage_splits = None 
-        
-        hetero_micro_batch_sizes = args.hetero_micro_batch_sizes[1::2] 
-        hetero_data_parallel_splits = args.hetero_micro_batch_sizes[::2] 
-        args.hetero_micro_batch_sizes = hetero_micro_batch_sizes
-        args.hetero_data_parallel_splits = hetero_data_parallel_splits
+        if args.hetero_dp_mode == "mbs":
+            assert args.hetero_micro_batch_sizes, \
+                "hetero_micro_batch_sizes should be specified when hetero_dp_mode is mbs"
+            assert args.micro_batch_size is None, \
+                "micro_batch_size should be None when hetero_dp_mode is mbs"
+            assert args.hetero_batch_sizes is None, \
+                "hetero_batch_sizes should be None when hetero_dp_mode is mbs"
+            
+            hetero_micro_batch_sizes = args.hetero_micro_batch_sizes[1::2] 
+            hetero_data_parallel_splits = args.hetero_micro_batch_sizes[::2] 
+            args.hetero_micro_batch_sizes = hetero_micro_batch_sizes
+            args.hetero_data_parallel_splits = hetero_data_parallel_splits
 
-        # Different device types have different micro batch sizes
-        args.micro_batch_size = hetero_micro_batch_sizes[args.hetero_device_types.index(args.hetero_current_device_type)]
+            # Different device types have different micro batch sizes
+            args.micro_batch_size = hetero_micro_batch_sizes[args.hetero_device_types.index(args.hetero_current_device_type)]
 
-        assert len(args.hetero_micro_batch_sizes) == len(args.hetero_device_types), \
-            f"length of hetero_micro_batch_sizes {args.hetero_micro_batch_sizes} should be equal to the length of hetero_device_types {args.hetero_device_types}"
-        data_parallel_size = sum(args.hetero_data_parallel_splits)
-        assert data_parallel_size == args.data_parallel_size, \
-            f"sum of hetero_data_parallel_splits {args.hetero_data_parallel_splits} should be equal to data_parallel_size {args.data_parallel_size}"
-        micro_batch_for_all_data_parallel = sum(map(lambda x, y: x * y, 
-                                                      args.hetero_micro_batch_sizes,
-                                                      args.hetero_data_parallel_splits))
-        assert args.global_batch_size % micro_batch_for_all_data_parallel == 0, \
-            f"global batch size {args.global_batch_size} is not divisible by micro_batch_for_all_data_parallel {micro_batch_for_all_data_parallel}, "\
-            f"which is the sum of hetero_micro_batch_sizes {args.hetero_micro_batch_sizes} and hetero_data_parallel_splits {args.hetero_data_parallel_splits}"
-        
+            assert len(args.hetero_micro_batch_sizes) == len(args.hetero_device_types), \
+                f"length of hetero_micro_batch_sizes {args.hetero_micro_batch_sizes} should be equal to the length of hetero_device_types {args.hetero_device_types}"
+            data_parallel_size = sum(args.hetero_data_parallel_splits)
+            assert data_parallel_size == args.data_parallel_size, \
+                f"sum of hetero_data_parallel_splits {args.hetero_data_parallel_splits} should be equal to data_parallel_size {args.data_parallel_size}"
+            micro_batch_for_all_data_parallel = sum(map(lambda x, y: x * y, 
+                                                        args.hetero_micro_batch_sizes,
+                                                        args.hetero_data_parallel_splits))
+            assert args.global_batch_size % micro_batch_for_all_data_parallel == 0, \
+                f"global batch size {args.global_batch_size} is not divisible by micro_batch_for_all_data_parallel {micro_batch_for_all_data_parallel}, "\
+                f"which is the sum of hetero_micro_batch_sizes {args.hetero_micro_batch_sizes} and hetero_data_parallel_splits {args.hetero_data_parallel_splits}"
+        elif args.hetero_dp_mode == 'bs':
+            assert args.hetero_micro_batch_sizes is None, \
+                "hetero_micro_batch_sizes should be None when hetero_dp_mode is bs"
+            assert args.micro_batch_size is not None, \
+                "micro_batch_size should be specified when hetero_dp_mode is bs"
+            assert args.hetero_batch_sizes , \
+                "hetero_batch_size should be specified when hetero_dp_mode is bs"
+            
+            hetero_data_parallel_splits = args.hetero_batch_sizes[::2] 
+            args.hetero_data_parallel_splits = hetero_data_parallel_splits
+            hetero_batch_sizes = args.hetero_batch_sizes[1::2]
+            args.hetero_batch_sizes = hetero_batch_sizes
+
+            # Different device types have different batch sizes
+            args.batch_size = hetero_batch_sizes[args.hetero_device_types.index(args.hetero_current_device_type)]
+
+            assert len(args.hetero_batch_sizes) == len(args.hetero_device_types), \
+                f"length of hetero_batch_sizes {args.hetero_batch_sizes} should be equal to the length of hetero_device_types {args.hetero_device_types}"
+            data_parallel_size = sum(args.hetero_data_parallel_splits)
+            assert data_parallel_size == args.data_parallel_size, \
+                f"sum of hetero_data_parallel_splits {args.hetero_data_parallel_splits} should be equal to data_parallel_size {args.data_parallel_size}"
+            micro_batch_for_all_data_parallel = sum(map(lambda x, y: x * y, 
+                                                  args.hetero_batch_sizes,
+                                                  args.hetero_data_parallel_splits)) // args.micro_batch_size
+            assert args.global_batch_size % micro_batch_for_all_data_parallel == 0, \
+                f"global batch size {args.global_batch_size} is not divisible by micro_batch_for_all_data_parallel {micro_batch_for_all_data_parallel}, "\
+
     if args.hetero_mode == "pp":
         assert args.hetero_pipeline_stages, \
             "hetero_pipeline_stages should be specified when hetero_mode is pp"
         assert args.hetero_micro_batch_sizes is None, \
             "hetero_micro_batch_sizes should be None when hetero_mode is pp"
+        assert args.hetero_batch_sizes is None, \
+            "hetero_batch_sizes should be None when hetero_mode is pp"
         args.hetero_data_parallel_splits = None 
 
         stages = []
@@ -1570,6 +1602,13 @@ def _add_hetero_args(parser):
                        'hetero-pipeline-stages must be in the form:'
                        'n0 layers_0_0 layers_0_1 ... n1 nlayers_1_0 nlayers_1_1 ...'
                        'The order should be consistent with --hetero-device-types.')
+    group.add_argument('--hetero-batch-sizes', nargs='*', type=int, default=None,
+                       help='hetero-batch-size must be in the form: n0 bs0 n1 bs1 ...'
+                       'The order should be consistent with --hetero-device-types.'
+                       'The sum of n0, n1 ... should be equal to data-parallel-size.'
+                       'Each group has same micro-batch-size.')
+    group.add_argument('--hetero-dp-mode', choices=['bs', 'mbs'], type = str, default=None,
+                       help='dp mode for hetero training, bs refers to batch size, mbs refers to micro batch size.')
 
     return parser
 

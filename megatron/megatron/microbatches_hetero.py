@@ -11,10 +11,16 @@ def build_num_microbatches_calculator_hetero(args):
 
     # Constant num micro-batches.
     if args.rampup_batch_size is None:
-        num_microbatches_calculator = ConstantNumMicroBatches(
-            args.global_batch_size, args.micro_batch_size,
-            args.data_parallel_size, args.hetero_micro_batch_sizes,
-            args.hetero_data_parallel_splits)
+        if args.hetero_dp_mode == 'mbs':
+            num_microbatches_calculator = ConstantNumMicroBatches(
+                args.global_batch_size, args.micro_batch_size,
+                args.data_parallel_size, args.hetero_micro_batch_sizes,
+                args.hetero_data_parallel_splits)
+        else:
+            num_microbatches_calculator = ConstantNumMicroBatches_bs(
+                args.global_batch_size, args.micro_batch_size,
+                args.data_parallel_size, args.hetero_batch_sizes,
+                args.hetero_data_parallel_splits)
         if args.rank == 0:
             print('setting number of micro-batches to constant {}'.format(
                 num_microbatches_calculator.get()), flush=True)
@@ -75,6 +81,29 @@ class ConstantNumMicroBatches(NumMicroBatchesCalculator):
                                                     hetero_data_parallel_splits)
         self.num_micro_batches = global_batch_size // \
                                  micro_batch_for_all_data_parallel
+        assert self.num_micro_batches >= 1
+        self.current_global_batch_size = global_batch_size
+
+    def update(self, consumed_samples, consistency_check):
+        pass
+
+class ConstantNumMicroBatches_bs(NumMicroBatchesCalculator):
+
+    def __init__(self, global_batch_size, micro_batch_size, data_parallel_size,
+                 hetero_batch_sizes, hetero_data_parallel_splits):
+        self.micro_batch_size = micro_batch_size
+        self.data_parallel_size = data_parallel_size
+        micro_batch_for_all_data_parallel = sum(map(lambda x, y: x * y, 
+                                                  hetero_batch_sizes,
+                                                  hetero_data_parallel_splits)) // micro_batch_size
+        assert global_batch_size % micro_batch_for_all_data_parallel == 0, \
+            'global batch size ({}) is not divisible by the sum of batch size ({})' \
+            ' times data parallel size ({}) devided micro batch size({})'.format(global_batch_size,
+                                                    hetero_batch_sizes,
+                                                    hetero_data_parallel_splits,
+                                                    micro_batch_size)
+        self.num_micro_batches = hetero_batch_sizes // \
+            micro_batch_size # not a number, a List!
         assert self.num_micro_batches >= 1
         self.current_global_batch_size = global_batch_size
 
